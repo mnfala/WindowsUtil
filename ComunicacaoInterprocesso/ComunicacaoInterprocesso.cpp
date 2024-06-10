@@ -11,10 +11,18 @@ void teste(void* parameters)
 	memcpy(parameters, buffer,sizeof(buffer));
 }
 
-int main()
-{
+void testeServer() {
 	char buffer[256];
-	strncpy_s(buffer, "teste", sizeof(buffer)-1);
+	strncpy_s(buffer, "teste", sizeof(buffer) - 1);
+	RemoteProcedureCall rpcServer("teste", true);
+	rpcServer.WaitClient();
+	rpcServer.CallRemoteProcedure("teste", buffer, sizeof(buffer));
+	rpcServer.GetMessage(buffer, sizeof(buffer));
+}
+
+void teste() {
+	char buffer[256];
+	strncpy_s(buffer, "teste", sizeof(buffer) - 1);
 	RemoteProcedureCall rpcServer("teste", true);
 	RemoteProcedureCall rpcClient("teste", false);
 	rpcClient.RegisterProcedure("teste", teste);
@@ -22,6 +30,11 @@ int main()
 	Sleep(1000);
 	rpcServer.CallRemoteProcedure("teste", buffer, sizeof(buffer));
 	rpcServer.GetMessage(buffer, sizeof(buffer));
+}
 
+int main()
+{
+
+	testeServer();
 }
 

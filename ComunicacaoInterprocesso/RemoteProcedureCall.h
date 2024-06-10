@@ -20,8 +20,9 @@ public:
 	RemoteProcedureCall(std::string name, bool server);
 	~RemoteProcedureCall();
 	void RegisterProcedure(std::string name, RemoteProcedure functionPointer);
-	void StartServer();
+	
 	void StartClient();
+	void WaitClient();
 	void CallRemoteProcedure(std::string name, void* parameters, unsigned int size);
 	void SetMessage(void *dados, unsigned int size);
 	void GetMessage(void* dados, unsigned int size);
@@ -34,7 +35,8 @@ private :
 	bool server;
 
 	HANDLE mutex;
-	HANDLE event;
+	HANDLE eventIniciado;
+	HANDLE eventProcessado;
 	HANDLE thread;
 	HANDLE mapFile;
 

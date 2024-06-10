@@ -6,8 +6,11 @@ RemoteProcedureCall::RemoteProcedureCall(std::string name, bool server)
 	wsprintf(buffer, L"%s_mutex", name.c_str());
 	mutex = CreateMutex(NULL, FALSE, buffer);
 
-	wsprintf(buffer, L"%s_event", name.c_str());
-	event = CreateEvent(NULL, FALSE, FALSE, buffer);
+	wsprintf(buffer, L"%s_eventIniciado", name.c_str());
+	eventIniciado = CreateEvent(NULL, FALSE, FALSE, buffer);
+	wsprintf(buffer, L"%s_eventProcessado", name.c_str());
+	//o evento processado é resetado manualmente pelo cliente
+	eventProcessado = CreateEvent(NULL, TRUE, FALSE, buffer);
 
 	thread = NULL;
 	wsprintf(buffer, L"%s_mapfile", name.c_str());
@@ -26,9 +29,12 @@ RemoteProcedureCall::~RemoteProcedureCall()
 	if (mutex)
 		CloseHandle(mutex);
 	mutex = NULL;
-	if (event)
-		CloseHandle(event);
-	event = NULL;
+	if (eventIniciado)
+		CloseHandle(eventIniciado);
+	eventIniciado = NULL;
+	if (eventProcessado)
+		CloseHandle(eventProcessado);
+	eventProcessado = NULL;
 	if (mapFile)
 		CloseHandle(mapFile);
 	mapFile = NULL;
@@ -54,11 +60,18 @@ void RemoteProcedureCall::CallProcedure(std::string name, void* parameters)
 	procedures[name](parameters);
 }
 
+void RemoteProcedureCall::WaitClient()
+{
+	ResetEvent(eventIniciado);
+	WaitForSingleObject(eventIniciado, INFINITE);
+}
 
 void RemoteProcedureCall::StartClient()
 {
 	thread = CreateThread(NULL, 0, ClientThread, this, 0, NULL);
 }
+
+
 
 DWORD WINAPI RemoteProcedureCall::ClientThread(LPVOID lpParam)
 {
@@ -69,19 +82,40 @@ DWORD WINAPI RemoteProcedureCall::ClientThread(LPVOID lpParam)
 
 void RemoteProcedureCall::ClientThreadLoop()
 {
+	DWORD  error;
+
+	//Primeiro sinaliza a thread para o cliente saber que o servidor está pronto
+	error = SetEvent(eventIniciado);
+	printf("Thread cliente sinalizou\n");
+	if (!error) {
+		printf("Erro na sinalizacao\n");
+		return;
+	}
 	while (true)
 	{
-		DWORD  error = WaitForSingleObject(event, INFINITE);
-		if (error)
+		printf("Aguardando cliente\n");
+		error = WaitForSingleObject(eventIniciado, INFINITE);
+		if (error) {
+			printf("Erro na espera do evento \n");
 			return;
+		}
 		CopyDataFromMapFile();
+		printf("Inicio processamento mensagem %s \n", message.name);
 		std::string name = message.name;
 		void* parameters = message.parameters;
 		CallProcedure(name, parameters);
 		CopyDataToMapFile();
-		error = SetEvent(event);
-		if (!error)
+		printf("Fim processamento mensagem %s \n", message.name);
+		error = ResetEvent(eventIniciado);
+		if (!error) {
+			printf("Erro no reset de eventIniciado \n");
 			return;
+		}
+		error = SetEvent(eventProcessado);
+		if (!error) {
+			printf("Erro na sinalizacao de retorno de mensagem\n");
+			return;
+		}
 	}
 }
 
@@ -102,8 +136,9 @@ void RemoteProcedureCall::CallRemoteProcedure(std::string name, void* parameters
 	strcpy_s(message.name, name.c_str());
 	SetMessage(parameters, size);
 	CopyDataToMapFile();
-	SetEvent(event);
-	WaitForSingleObject(event, INFINITE);
+	ResetEvent(eventProcessado);
+	SetEvent(eventIniciado);
+	WaitForSingleObject(eventProcessado, INFINITE);
 	CopyDataFromMapFile();
 	ReleaseMutex(mutex);
 }
